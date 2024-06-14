@@ -8,8 +8,8 @@
   >
     <update-banner :latest-chatwoot-version="latestChatwootVersion" />
     <template v-if="currentAccountId">
-      <pending-email-verification-banner />
-      <payment-pending-banner />
+      <pending-email-verification-banner v-if="hideOnOnboardingView" />
+      <payment-pending-banner v-if="hideOnOnboardingView" />
       <upgrade-banner />
     </template>
     <transition name="fade" mode="out-in">
@@ -27,6 +27,7 @@
 
 <script>
 import { mapGetters } from 'vuex';
+import router from '../dashboard/routes';
 import AddAccountModal from '../dashboard/components/layout/sidebarComponents/AddAccountModal.vue';
 import LoadingState from './components/widgets/LoadingState.vue';
 import NetworkNotification from './components/NetworkNotification.vue';
@@ -38,10 +39,12 @@ import vueActionCable from './helper/actionCable';
 import WootSnackbarBox from './components/SnackbarContainer.vue';
 import rtlMixin from 'shared/mixins/rtlMixin';
 import { setColorTheme } from './helper/themeHelper';
+import { isOnOnboardingView } from 'v3/helpers/RouteHelper';
 import {
   registerSubscription,
   verifyServiceWorkerExistence,
 } from './helper/pushHelper';
+import ReconnectService from 'dashboard/helper/ReconnectService';
 
 export default {
   name: 'App',
@@ -63,6 +66,7 @@ export default {
     return {
       showAddAccountModal: false,
       latestChatwootVersion: null,
+      reconnectService: null,
     };
   },
 
@@ -78,6 +82,9 @@ export default {
     hasAccounts() {
       const { accounts = [] } = this.currentUser || {};
       return accounts.length > 0;
+    },
+    hideOnOnboardingView() {
+      return !isOnOnboardingView(this.$route);
     },
   },
 
@@ -97,6 +104,11 @@ export default {
     this.initializeColorTheme();
     this.listenToThemeChanges();
     this.setLocale(window.chatwootConfig.selectedLocale);
+  },
+  beforeDestroy() {
+    if (this.reconnectService) {
+      this.reconnectService.disconnect();
+    }
   },
   methods: {
     initializeColorTheme() {
@@ -121,6 +133,7 @@ export default {
       this.updateRTLDirectionView(locale);
       this.latestChatwootVersion = latestChatwootVersion;
       vueActionCable.init(pubsubToken);
+      this.reconnectService = new ReconnectService(this.$store, router);
 
       verifyServiceWorkerExistence(registration =>
         registration.pushManager.getSubscription().then(subscription => {
